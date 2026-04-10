@@ -451,6 +451,50 @@ class SquidProxyManager(ctk.CTk):
                                       show="*", width=160)
         self.pwd_entry.pack(side="right", padx=15)
 
+    def _apply_treeview_style(self):
+        style = ttk.Style()
+        is_dark = self.cfg.get("theme") == "dark"
+        if is_dark:
+            style.configure("Custom.Treeview",
+                            background="#2b2b2b", foreground="#e0e0e0",
+                            fieldbackground="#2b2b2b", rowheight=28,
+                            font=("Segoe UI", 10))
+            style.configure("Custom.Treeview.Heading",
+                            background="#3c3c3c", foreground="#ffffff",
+                            font=("Segoe UI", 10, "bold"))
+            style.map("Custom.Treeview",
+                      background=[("selected", "#1f6aa5")],
+                      foreground=[("selected", "#ffffff")])
+        else:
+            style.configure("Custom.Treeview",
+                            background="#ffffff", foreground="#1a1a1a",
+                            fieldbackground="#ffffff", rowheight=28,
+                            font=("Segoe UI", 10))
+            style.configure("Custom.Treeview.Heading",
+                            font=("Segoe UI", 10, "bold"))
+            style.map("Custom.Treeview",
+                      background=[("selected", "#0078d7")],
+                      foreground=[("selected", "#ffffff")])
+
+    def _bind_clipboard(self, textbox: ctk.CTkTextbox):
+        inner = textbox._textbox
+        inner.bind("<Control-v>", lambda e: self._paste_to(inner))
+        inner.bind("<Control-V>", lambda e: self._paste_to(inner))
+        inner.bind("<Control-a>", lambda e: (inner.tag_add("sel", "1.0", "end"), "break"))
+        inner.bind("<Control-A>", lambda e: (inner.tag_add("sel", "1.0", "end"), "break"))
+
+    def _paste_to(self, widget):
+        try:
+            text = self.clipboard_get()
+            try:
+                widget.delete("sel.first", "sel.last")
+            except tk.TclError:
+                pass
+            widget.insert("insert", text)
+        except tk.TclError:
+            pass
+        return "break"
+
     def _build_parser_tab(self):
         tab = self.tabs.add(self.t("tab_parser"))
         top = ctk.CTkFrame(tab)
@@ -461,12 +505,14 @@ class SquidProxyManager(ctk.CTk):
                      font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 2))
         self.input_text = ctk.CTkTextbox(left, height=120)
         self.input_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self._bind_clipboard(self.input_text)
         right = ctk.CTkFrame(top)
         right.pack(side="right", fill="both", expand=True, padx=(5, 0))
         ctk.CTkLabel(right, text=self.t("exc_label"),
                      font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 2))
         self.exc_text = ctk.CTkTextbox(right, height=120)
         self.exc_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self._bind_clipboard(self.exc_text)
         exc_content = DEFAULT_EXCLUSIONS
         if self.exc_path.exists():
             exc_content = self.exc_path.read_text("utf-8")
@@ -494,19 +540,11 @@ class SquidProxyManager(ctk.CTk):
 
         table_frame = ctk.CTkFrame(tab)
         table_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        style = ttk.Style()
-        if self.cfg.get("theme") == "dark":
-            style.configure("Custom.Treeview", background="#2b2b2b", foreground="white",
-                            fieldbackground="#2b2b2b", rowheight=28, font=("Segoe UI", 10))
-            style.configure("Custom.Treeview.Heading", background="#3c3c3c", foreground="white",
-                            font=("Segoe UI", 10, "bold"))
-            style.map("Custom.Treeview", background=[("selected", "#1f6aa5")])
-        else:
-            style.configure("Custom.Treeview", rowheight=28, font=("Segoe UI", 10))
-            style.configure("Custom.Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        self._apply_treeview_style()
 
         cols = ("original", "extracted", "type", "status")
-        inner = tk.Frame(table_frame)
+        is_dark = self.cfg.get("theme") == "dark"
+        inner = tk.Frame(table_frame, bg="#2b2b2b" if is_dark else "#f0f0f0")
         inner.pack(fill="both", expand=True, padx=5, pady=5)
         scroll = ttk.Scrollbar(inner)
         scroll.pack(side="right", fill="y")
@@ -536,7 +574,8 @@ class SquidProxyManager(ctk.CTk):
 
         ctk.CTkLabel(tab, text=self.t("hashes_label"),
                      font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(10, 2))
-        hash_inner = tk.Frame(tab)
+        is_dark = self.cfg.get("theme") == "dark"
+        hash_inner = tk.Frame(tab, bg="#2b2b2b" if is_dark else "#f0f0f0")
         hash_inner.pack(fill="x", padx=15, pady=(0, 10))
         hscroll = ttk.Scrollbar(hash_inner)
         hscroll.pack(side="right", fill="y")
@@ -585,7 +624,8 @@ class SquidProxyManager(ctk.CTk):
                          text_color="gray").pack(side="left", padx=10)
             ctk.CTkLabel(info, text=f"{self.t('type_label')} {lst.get('type', 'mixed')}",
                          text_color="gray").pack(side="left", padx=10)
-            table_fr = tk.Frame(tab)
+            is_dark = self.cfg.get("theme") == "dark"
+            table_fr = tk.Frame(tab, bg="#2b2b2b" if is_dark else "#f0f0f0")
             table_fr.pack(fill="both", expand=True, padx=10, pady=5)
             sc = ttk.Scrollbar(table_fr)
             sc.pack(side="right", fill="y")
@@ -620,29 +660,18 @@ class SquidProxyManager(ctk.CTk):
         self.set_user.pack(side="left", padx=5)
         self.set_user.insert(0, self.cfg.get("ssh_user", "root"))
 
-        lists_frame = ctk.CTkFrame(tab)
-        lists_frame.pack(fill="both", expand=True, padx=20, pady=10)
-        ctk.CTkLabel(lists_frame, text=self.t("lists_section"),
+        self.lists_frame = ctk.CTkFrame(tab)
+        self.lists_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        ctk.CTkLabel(self.lists_frame, text=self.t("lists_section"),
                      font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=15, pady=(15, 5))
-        ctk.CTkLabel(lists_frame, text=self.t("lists_desc"),
+        ctk.CTkLabel(self.lists_frame, text=self.t("lists_desc"),
                      text_color="gray").pack(anchor="w", padx=15, pady=(0, 10))
         self.list_entries = []
         for lst in self.cfg["lists"]:
-            row = ctk.CTkFrame(lists_frame)
-            row.pack(fill="x", padx=15, pady=3)
-            ne = ctk.CTkEntry(row, placeholder_text=self.t("list_name_ph"), width=180)
-            ne.pack(side="left", padx=5)
-            ne.insert(0, lst["name"])
-            pe = ctk.CTkEntry(row, placeholder_text=self.t("list_path_ph"), width=350)
-            pe.pack(side="left", padx=5)
-            pe.insert(0, lst["path"])
-            te = ctk.CTkComboBox(row, values=["ip", "url", "mixed"], width=100)
-            te.pack(side="left", padx=5)
-            te.set(lst.get("type", "mixed"))
-            self.list_entries.append((ne, pe, te))
-        btn_row = ctk.CTkFrame(lists_frame)
-        btn_row.pack(fill="x", padx=15, pady=10)
-        ctk.CTkButton(btn_row, text=self.t("add_list"), width=120,
+            self._create_list_row(lst["name"], lst["path"], lst.get("type", "mixed"))
+        self.btn_row = ctk.CTkFrame(self.lists_frame)
+        self.btn_row.pack(fill="x", padx=15, pady=10)
+        ctk.CTkButton(self.btn_row, text=self.t("add_list"), width=120,
                       command=self._add_list_entry).pack(side="left", padx=5)
 
         appearance_frame = ctk.CTkFrame(tab)
@@ -666,10 +695,25 @@ class SquidProxyManager(ctk.CTk):
                       font=ctk.CTkFont(size=14, weight="bold"),
                       height=45, command=self._save_settings).pack(padx=20, pady=15)
 
+    def _create_list_row(self, name: str = "", path: str = "", ltype: str = "mixed"):
+        row = ctk.CTkFrame(self.lists_frame)
+        row.pack(fill="x", padx=15, pady=3, before=self.btn_row if hasattr(self, 'btn_row') else None)
+        ne = ctk.CTkEntry(row, placeholder_text=self.t("list_name_ph"), width=180)
+        ne.pack(side="left", padx=5)
+        if name:
+            ne.insert(0, name)
+        pe = ctk.CTkEntry(row, placeholder_text=self.t("list_path_ph"), width=350)
+        pe.pack(side="left", padx=5)
+        if path:
+            pe.insert(0, path)
+        te = ctk.CTkComboBox(row, values=["ip", "url", "mixed"], width=100)
+        te.pack(side="left", padx=5)
+        te.set(ltype)
+        self.list_entries.append((ne, pe, te))
+
     def _add_list_entry(self):
-        self.cfg["lists"].append({"name": "New List", "path": "/etc/squid/new.list", "type": "mixed"})
-        self._save_settings()
-        messagebox.showinfo("Info", self.t("msg_restart_needed"))
+        self._create_list_row("New List", "/etc/squid/new.list", "mixed")
+        self.log(self.t("msg_restart_needed"))
 
     def _build_bottom_bar(self):
         bar = ctk.CTkFrame(self, height=120)

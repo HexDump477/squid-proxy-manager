@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+spm_config.json
+spm_exclusions.txt
+*.txt
+!requirements.txt
+.venv/
+dist/
+build/
+*.spec

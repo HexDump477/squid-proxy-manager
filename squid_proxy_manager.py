@@ -3,7 +3,6 @@
 Squid Proxy Manager v2.0
 Cross-platform GUI for managing Squid proxy ACLs over SSH.
 Author: HexDump477
-License: MIT
 """
 
 import re
@@ -453,28 +452,43 @@ class SquidProxyManager(ctk.CTk):
 
     def _apply_treeview_style(self):
         style = ttk.Style()
+        style.theme_use("clam")
         is_dark = self.cfg.get("theme") == "dark"
         if is_dark:
             style.configure("Custom.Treeview",
-                            background="#2b2b2b", foreground="#e0e0e0",
-                            fieldbackground="#2b2b2b", rowheight=28,
+                            background="#1e1e1e", foreground="#e0e0e0",
+                            fieldbackground="#1e1e1e", rowheight=28,
+                            borderwidth=0,
                             font=("Segoe UI", 10))
             style.configure("Custom.Treeview.Heading",
-                            background="#3c3c3c", foreground="#ffffff",
+                            background="#333333", foreground="#ffffff",
+                            borderwidth=1, relief="flat",
                             font=("Segoe UI", 10, "bold"))
             style.map("Custom.Treeview",
                       background=[("selected", "#1f6aa5")],
                       foreground=[("selected", "#ffffff")])
+            style.map("Custom.Treeview.Heading",
+                      background=[("active", "#444444")])
+            style.configure("TScrollbar",
+                            background="#333333", troughcolor="#1e1e1e",
+                            borderwidth=0, arrowsize=14)
+            style.map("TScrollbar",
+                      background=[("active", "#555555")])
         else:
             style.configure("Custom.Treeview",
                             background="#ffffff", foreground="#1a1a1a",
                             fieldbackground="#ffffff", rowheight=28,
+                            borderwidth=0,
                             font=("Segoe UI", 10))
             style.configure("Custom.Treeview.Heading",
+                            background="#e8e8e8", foreground="#1a1a1a",
+                            borderwidth=1, relief="flat",
                             font=("Segoe UI", 10, "bold"))
             style.map("Custom.Treeview",
                       background=[("selected", "#0078d7")],
                       foreground=[("selected", "#ffffff")])
+            style.map("Custom.Treeview.Heading",
+                      background=[("active", "#d0d0d0")])
 
     def _bind_clipboard(self, textbox: ctk.CTkTextbox):
         inner = textbox._textbox
@@ -709,11 +723,27 @@ class SquidProxyManager(ctk.CTk):
         te = ctk.CTkComboBox(row, values=["ip", "url", "mixed"], width=100)
         te.pack(side="left", padx=5)
         te.set(ltype)
-        self.list_entries.append((ne, pe, te))
+        entry_tuple = (ne, pe, te, row)
+        ctk.CTkButton(row, text="X", width=30, height=28,
+                      fg_color="#c0392b", hover_color="#962d22",
+                      command=lambda et=entry_tuple: self._remove_list_entry(et)).pack(side="left", padx=5)
+        self.list_entries.append(entry_tuple)
 
     def _add_list_entry(self):
+        if len(self.list_entries) >= 6:
+            messagebox.showwarning("Warning", "Maximum 6 lists allowed.")
+            return
         self._create_list_row("New List", "/etc/squid/new.list", "mixed")
         self.log(self.t("msg_restart_needed"))
+
+    def _remove_list_entry(self, entry_tuple):
+        if len(self.list_entries) <= 1:
+            messagebox.showwarning("Warning", "At least 1 list is required.")
+            return
+        ne, pe, te, row = entry_tuple
+        row.destroy()
+        if entry_tuple in self.list_entries:
+            self.list_entries.remove(entry_tuple)
 
     def _build_bottom_bar(self):
         bar = ctk.CTkFrame(self, height=120)
@@ -1012,7 +1042,7 @@ class SquidProxyManager(ctk.CTk):
         self.cfg["theme"] = self.theme_combo.get()
         self.cfg["language"] = self.lang_combo.get()
         new_lists = []
-        for ne, pe, te in self.list_entries:
+        for ne, pe, te, _row in self.list_entries:
             n = ne.get().strip()
             p = pe.get().strip()
             t = te.get()

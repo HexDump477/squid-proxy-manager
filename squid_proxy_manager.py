@@ -552,23 +552,29 @@ class SquidProxyManager(ctk.CTk):
                       hover_color="#1e8449",
                       command=self._send_selected).pack(side="left", padx=10)
 
-        table_frame = ctk.CTkFrame(tab)
-        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        # Main results + hashes in resizable PanedWindow
         self._apply_treeview_style()
-
-        cols = ("original", "extracted", "type", "status")
         is_dark = self.cfg.get("theme") == "dark"
-        inner = tk.Frame(table_frame, bg="#2b2b2b" if is_dark else "#f0f0f0")
-        inner.pack(fill="both", expand=True, padx=5, pady=5)
-        scroll = ttk.Scrollbar(inner)
+        paned = tk.PanedWindow(tab, orient=tk.VERTICAL, sashwidth=6,
+                               bg="#444444" if is_dark else "#cccccc")
+        paned.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # -- Top pane: results table --
+        top_pane = tk.Frame(paned, bg="#2b2b2b" if is_dark else "#f0f0f0")
+        cols = ("original", "extracted", "type", "status")
+        scroll = ttk.Scrollbar(top_pane)
         scroll.pack(side="right", fill="y")
-        self.tree = ttk.Treeview(inner, columns=cols, show="headings",
+        self.tree = ttk.Treeview(top_pane, columns=cols, show="headings",
                                  selectmode="extended", yscrollcommand=scroll.set,
                                  style="Custom.Treeview")
-        self.tree.heading("original", text=self.t("col_original"))
-        self.tree.heading("extracted", text=self.t("col_extracted"))
-        self.tree.heading("type", text=self.t("col_type"))
-        self.tree.heading("status", text=self.t("col_status"))
+        self.tree.heading("original", text=self.t("col_original"),
+                          command=lambda: self._sort_tree(self.tree, "original"))
+        self.tree.heading("extracted", text=self.t("col_extracted"),
+                          command=lambda: self._sort_tree(self.tree, "extracted"))
+        self.tree.heading("type", text=self.t("col_type"),
+                          command=lambda: self._sort_tree(self.tree, "type"))
+        self.tree.heading("status", text=self.t("col_status"),
+                          command=lambda: self._sort_tree(self.tree, "status"))
         self.tree.column("original", width=320)
         self.tree.column("extracted", width=280)
         self.tree.column("type", width=80)
@@ -578,6 +584,34 @@ class SquidProxyManager(ctk.CTk):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.config(command=self.tree.yview)
         self.tree.bind("<Delete>", lambda e: self._delete_tree_rows())
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
+        self._edit_entry = None
+        self._edit_row_id = None
+        paned.add(top_pane, minsize=150)
+
+        # -- Bottom pane: hashes --
+        bot_pane = tk.Frame(paned, bg="#2b2b2b" if is_dark else "#f0f0f0")
+        hash_header = tk.Frame(bot_pane, bg="#2b2b2b" if is_dark else "#f0f0f0")
+        hash_header.pack(fill="x")
+        tk.Label(hash_header, text=self.t("hashes_label"),
+                 font=("Segoe UI", 10, "bold"),
+                 bg="#2b2b2b" if is_dark else "#f0f0f0",
+                 fg="#e0e0e0" if is_dark else "#1a1a1a").pack(side="left", padx=10, pady=5)
+        hscroll = ttk.Scrollbar(bot_pane)
+        hscroll.pack(side="right", fill="y")
+        self.hash_tree = ttk.Treeview(bot_pane, columns=("hash", "type"),
+                                      show="headings", yscrollcommand=hscroll.set,
+                                      style="Custom.Treeview")
+        self.hash_tree.heading("hash", text=self.t("col_hash"),
+                               command=lambda: self._sort_tree(self.hash_tree, "hash"))
+        self.hash_tree.heading("type", text=self.t("col_algo"),
+                               command=lambda: self._sort_tree(self.hash_tree, "type"))
+        self.hash_tree.column("hash", width=600)
+        self.hash_tree.column("type", width=100)
+        self.hash_tree.pack(side="left", fill="both", expand=True)
+        hscroll.config(command=self.hash_tree.yview)
+        self.hash_tree.bind("<Delete>", lambda e: self._delete_hash_rows())
+        paned.add(bot_pane, minsize=80)
 
         btm = ctk.CTkFrame(tab)
         btm.pack(fill="x", padx=10, pady=5)
@@ -585,30 +619,22 @@ class SquidProxyManager(ctk.CTk):
                       hover_color="#636e72", command=self._delete_tree_rows).pack(side="left", padx=5)
         ctk.CTkButton(btm, text=self.t("copy_selected"),
                       command=self._copy_tree_rows).pack(side="left", padx=5)
-
-        ctk.CTkLabel(tab, text=self.t("hashes_label"),
-                     font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(10, 2))
-        is_dark = self.cfg.get("theme") == "dark"
-        hash_inner = tk.Frame(tab, bg="#2b2b2b" if is_dark else "#f0f0f0")
-        hash_inner.pack(fill="x", padx=15, pady=(0, 10))
-        hscroll = ttk.Scrollbar(hash_inner)
-        hscroll.pack(side="right", fill="y")
-        self.hash_tree = ttk.Treeview(hash_inner, columns=("hash", "type"),
-                                      show="headings", height=4, yscrollcommand=hscroll.set,
-                                      style="Custom.Treeview")
-        self.hash_tree.heading("hash", text=self.t("col_hash"))
-        self.hash_tree.heading("type", text=self.t("col_algo"))
-        self.hash_tree.column("hash", width=600)
-        self.hash_tree.column("type", width=100)
-        self.hash_tree.pack(side="left", fill="x", expand=True)
-        hscroll.config(command=self.hash_tree.yview)
+        ctk.CTkButton(btm, text=self.t("copy_selected") + " (hash)",
+                      command=self._copy_hash_rows).pack(side="left", padx=5)
+        ctk.CTkButton(btm, text=self.t("remove_rows") + " (hash)", fg_color="#7f8c8d",
+                      hover_color="#636e72",
+                      command=self._delete_hash_rows).pack(side="left", padx=5)
 
     def _build_list_tabs(self):
         self.list_trees = {}
         self.list_search_vars = {}
         self.list_add_entries = {}
+        seen_names = set()
         for lst in self.cfg["lists"]:
             name = lst["name"]
+            if name in seen_names:
+                continue
+            seen_names.add(name)
             tab = self.tabs.add(name)
             self.recent_items[name] = set()
             self.cached_data[name] = []
@@ -733,7 +759,13 @@ class SquidProxyManager(ctk.CTk):
         if len(self.list_entries) >= 6:
             messagebox.showwarning("Warning", "Maximum 6 lists allowed.")
             return
-        self._create_list_row("New List", "/etc/squid/new.list", "mixed")
+        existing = {ne.get().strip() for ne, pe, te, _r in self.list_entries}
+        name = "New List"
+        i = 2
+        while name in existing:
+            name = f"New List {i}"
+            i += 1
+        self._create_list_row(name, "/etc/squid/new.list", "mixed")
         self.log(self.t("msg_restart_needed"))
 
     def _remove_list_entry(self, entry_tuple):
@@ -746,11 +778,11 @@ class SquidProxyManager(ctk.CTk):
             self.list_entries.remove(entry_tuple)
 
     def _build_bottom_bar(self):
-        bar = ctk.CTkFrame(self, height=120)
+        bar = ctk.CTkFrame(self, height=160)
         bar.pack(fill="x", padx=10, pady=(0, 10))
         ctk.CTkLabel(bar, text=self.t("log_label"),
                      font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(5, 0))
-        self.log_box = ctk.CTkTextbox(bar, height=80, state="disabled")
+        self.log_box = ctk.CTkTextbox(bar, height=130, state="disabled")
         self.log_box.pack(fill="both", expand=True, padx=10, pady=(2, 10))
 
     def log(self, msg: str):
@@ -898,6 +930,83 @@ class SquidProxyManager(ctk.CTk):
             self.clipboard_append("\n".join(data))
             self.log(self.t("log_copied", n=len(data)))
 
+    def _delete_hash_rows(self):
+        for item in self.hash_tree.selection():
+            self.hash_tree.delete(item)
+
+    def _copy_hash_rows(self):
+        selected = self.hash_tree.selection()
+        if selected:
+            data = [self.hash_tree.item(i, "values")[0] for i in selected]
+            self.clipboard_clear()
+            self.clipboard_append("\n".join(data))
+            self.log(self.t("log_copied", n=len(data)))
+
+    # ─── Sorting ──────────────────────────────────────────────────────────
+
+    def _sort_tree(self, tree: ttk.Treeview, col: str):
+        data = [(tree.item(c, "values"), c) for c in tree.get_children()]
+        col_index = list(tree["columns"]).index(col)
+        reverse = getattr(tree, "_sort_reverse", False)
+        data.sort(key=lambda x: x[0][col_index].lower(), reverse=reverse)
+        for i, (vals, item) in enumerate(data):
+            tree.move(item, "", i)
+        tree._sort_reverse = not reverse
+
+    # ─── Inline editing ───────────────────────────────────────────────────
+
+    def _on_tree_double_click(self, event):
+        region = self.tree.identify("region", event.x, event.y)
+        if region != "cell":
+            return
+        col = self.tree.identify_column(event.x)
+        row_id = self.tree.identify_row(event.y)
+        if not row_id:
+            return
+        if col in ("#1", "#2"):
+            self._start_edit(row_id, col)
+
+    def _start_edit(self, row_id, col):
+        if self._edit_entry:
+            self._finish_edit()
+        bbox = self.tree.bbox(row_id, col)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        col_index = int(col.replace("#", "")) - 1
+        current = self.tree.item(row_id, "values")[col_index]
+        self._edit_row_id = row_id
+        self._edit_col = col_index
+        self._edit_entry = ttk.Entry(self.tree)
+        self._edit_entry.place(x=x, y=y, width=w, height=h)
+        self._edit_entry.insert(0, current)
+        self._edit_entry.select_range(0, tk.END)
+        self._edit_entry.focus_set()
+        self._edit_entry.bind("<Return>", lambda e: self._finish_edit())
+        self._edit_entry.bind("<Escape>", lambda e: self._cancel_edit())
+        self._edit_entry.bind("<FocusOut>", lambda e: self._finish_edit())
+
+    def _finish_edit(self):
+        if not self._edit_entry:
+            return
+        new_val = self._edit_entry.get().strip()
+        if new_val and self._edit_row_id:
+            vals = list(self.tree.item(self._edit_row_id, "values"))
+            old_val = vals[self._edit_col]
+            vals[self._edit_col] = new_val
+            self.tree.item(self._edit_row_id, values=vals)
+            if old_val != new_val:
+                self.log(f"{old_val} -> {new_val}")
+        self._edit_entry.destroy()
+        self._edit_entry = None
+        self._edit_row_id = None
+
+    def _cancel_edit(self):
+        if self._edit_entry:
+            self._edit_entry.destroy()
+            self._edit_entry = None
+        self._edit_row_id = None
+
     def _sync_list(self, name: str):
         ssh = self._get_ssh()
         if not ssh:
@@ -1042,12 +1151,14 @@ class SquidProxyManager(ctk.CTk):
         self.cfg["theme"] = self.theme_combo.get()
         self.cfg["language"] = self.lang_combo.get()
         new_lists = []
+        seen = set()
         for ne, pe, te, _row in self.list_entries:
             n = ne.get().strip()
             p = pe.get().strip()
             t = te.get()
-            if n and p:
+            if n and p and n not in seen:
                 new_lists.append({"name": n, "path": p, "type": t})
+                seen.add(n)
         if new_lists:
             self.cfg["lists"] = new_lists
         save_json(self.config_path, self.cfg)
